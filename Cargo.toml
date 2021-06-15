@@ -1,0 +1,16 @@
+[package]
+name = "service_hub"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = "1.4.0"
+xtra = { version = "0.5.1", features = ["with-async_std-1"] }
+async-std = { version = "1.9.0" }
+async-trait = "0.1.36"
+
+[[bin]]
+name = "main"
+path = "./src/lib.rs"
