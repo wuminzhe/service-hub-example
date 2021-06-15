@@ -1,81 +1,66 @@
-use xtra::Address;
+use std::time::Duration;
+use flume::{Sender, Receiver};
 
-use async_std::task;
+#[macro_use]
+extern crate async_trait;
 
-lazy_static::lazy_static! {
-    static ref SERVICES: Vec<Box<dyn Service + Sync>> = {
-        vec![
-            Box::new(AbcService {}),
-            Box::new(DefService {})
-        ]
-    };
+struct AbcService {
+    tx: Sender<String>,
+    rx: Receiver<String>
 }
 
-#[derive(Clone)]
-pub struct Message {
-    from: &'static str,
-    route_key: &'static str,
-    content: String,
-}
-
-#[async_trait::async_trait]
-pub trait Service {
-    async fn send(&self, msg: Message);
-}
-
-pub async fn broadcast(msg: Message) {
-    for service in SERVICES.iter() {
-        service.send(msg.clone()).await;
-    }
-}
-
-/////////////////////////////////////////////
-
-pub struct AbcService {
-}
-
-#[async_trait::async_trait]
-impl Service for AbcService {
-    async fn send(&self, msg: Message) {
-        if msg.from != "abc" {
-            println!("in abc ---------- from: {}", msg.from);
-            let msg = Message {
-                from: "abc",
-                route_key: "",
-                content: "".to_string()
-            };
-            broadcast(msg).await;
+impl AbcService {
+    pub fn new(tx: Sender<String>, rx: Receiver<String>) -> Self {
+        AbcService {
+            tx, rx
         }
+    }
 
+    pub async fn start_listening(&self) {
+        let rx_cloned = self.rx.clone();
+        let _t = async_std::task::spawn(async move {
+            while let Ok(msg) = rx_cloned.recv_async().await {
+                println!("Abc Received: {}", msg);
+            }
+        });
+    }
+
+}
+
+
+struct HelloService {
+    tx: Sender<String>,
+    rx: Receiver<String>
+}
+
+impl HelloService {
+    pub fn new(tx: Sender<String>, rx: Receiver<String>) -> Self {
+        HelloService {
+            tx, rx
+        }
+    }
+
+    pub async fn start_listening(&self) {
+        let rx_cloned = self.rx.clone();
+        let _t = async_std::task::spawn(async move {
+            while let Ok(msg) = rx_cloned.recv_async().await {
+                println!("Hello Received: {}", msg);
+            }
+        });
     }
 }
 
+#[async_std::main]
+async fn main() {
+    let (tx, rx) = flume::unbounded();
 
-pub struct DefService {
-}
+    let hello = HelloService::new(tx.clone(), rx.clone());
+    let abc = AbcService::new(tx.clone(), rx.clone());
+    hello.start_listening().await;
+    abc.start_listening().await;
 
-#[async_trait::async_trait]
-impl Service for DefService {
-    async fn send(&self, msg: Message) {
-        println!("in def ---------- from: {}", msg.from);
+    for i in (0.. 100) {
+        tx.send_async(format!("msg - {}", i)).await.unwrap();
+        async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }
-
-
-pub struct ServiceHub {
-}
-
-
-fn main() {
-    let msg = Message {
-        from: "admin",
-        route_key: "",
-        content: "".to_string()
-    };
-    task::block_on(
-        broadcast(msg)
-    );
-}
-
-
-
